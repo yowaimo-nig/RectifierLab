@@ -1,0 +1,151 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rectifier Lab</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;
+--bg:#e8edf2;--pn:#f9fbfc;--tx:#0f1b26;--mu:#55636f;--ln:#cdd6de;--wire:#2c3a47;--ac:#e8590c;--c1:#1864ab;--c2:#2b8a3e;--c3:#862e9c}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0a1219;--pn:#111c26;--tx:#e3ebf2;--mu:#8196a8;--ln:#233341;--wire:#a9bccd;--ac:#ffa94d;--c1:#4dabf7;--c2:#69db7c;--c3:#e599f7}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0a1219;--pn:#111c26;--tx:#e3ebf2;--mu:#8196a8;--ln:#233341;--wire:#a9bccd;--ac:#ffa94d;--c1:#4dabf7;--c2:#69db7c;--c3:#e599f7}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+[hidden]{display:none!important}
+header{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--ln);background:var(--pn)}
+h1{margin:0;font:700 17px Georgia,"Times New Roman",serif}
+label{display:flex;gap:6px;align-items:center;color:var(--mu);font-size:12px}
+label b{color:var(--tx);font-weight:600;min-width:52px;font-variant-numeric:tabular-nums}
+input[type=range]{width:105px;accent-color:var(--ac)}
+.seg{display:inline-flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden}
+.seg button,.btn{border:0;background:var(--pn);color:var(--tx);padding:6px 11px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ac);color:#fff}
+.btn,select{border:1px solid var(--ln);border-radius:8px;background:var(--pn);color:var(--tx);font:inherit;padding:5px 9px}
+main{display:grid;grid-template-columns:minmax(300px,5fr) 7fr;gap:12px;padding:12px 16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:10px 12px}
+h3{margin:0 0 4px;font-size:13px;font-weight:600}
+h3 span{color:var(--mu);font-weight:400}
+#ckt{width:100%;height:auto;display:block}
+.hint{color:var(--mu);font-size:12px;margin:6px 0 0}
+#right{display:grid;gap:10px;align-content:start}
+.st{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.st div{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:6px 12px;color:var(--mu);font-size:12px}
+.st b{display:block;color:var(--tx);font:600 20px ui-monospace,Menlo,monospace}
+canvas{width:100%;height:170px;display:block}
+.w{fill:none;stroke:var(--wire);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sym{fill:var(--pn);stroke:var(--wire);stroke-width:2}
+.on .sym{fill:var(--ac);stroke:var(--ac)}.on .w{stroke:var(--ac)}
+.dot{fill:var(--wire)}
+.hit{fill:transparent;stroke:none;cursor:pointer}
+.sel .hit{stroke:var(--ac);stroke-dasharray:4 3;stroke-width:1.5}
+.chip{fill:var(--pn);stroke:var(--ln)}
+svg text{fill:var(--mu);font:11px ui-monospace,Menlo,monospace}
+</style></head><body>
+<header><h1>Rectifier Lab</h1>
+<div class="seg" id="sN"><button data-v="2">Single-phase</button><button data-v="3">Three-phase</button></div>
+<div class="seg" id="sT"><button data-v="0">Diode</button><button data-v="1">Thyristor</button></div>
+<label id="wa">Firing angle α<input type="range" id="sa" min="0" max="180" value="45"><b id="ta"></b></label>
+<label>R<input type="range" id="sr" min="5" max="50" value="20"><b id="tr"></b></label>
+<label>L<input type="range" id="sl" min="0" max="500" step="5" value="100"><b id="tl"></b></label>
+<label>Speed<input type="range" id="ss" min="0.05" max="1" step="0.05" value="0.2"><b id="ts"></b></label>
+<button class="btn" id="bp">Pause</button></header>
+<main>
+<section class="card"><h3 id="ct"></h3><svg id="ckt" viewBox="0 0 480 370"></svg>
+<p class="hint">Click any component to see the waveform across it. Orange devices are conducting.</p></section>
+<section id="right">
+<div class="st"><div>Vdc measured<b id="s1"></b></div><div>Vdc ideal<b id="s2"></b></div><div>Idc measured<b id="s3"></b></div></div>
+<div class="card"><h3>Supply <span>voltage solid, line current dashed</span></h3><canvas id="c1"></canvas></div>
+<div class="card"><h3>Load output <span>vo solid, io dashed, Vdc marked</span></h3><canvas id="c2"></canvas></div>
+<div class="card"><h3 style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">Probe <select id="pr"></select><span>voltage solid, current dashed</span></h3><canvas id="c3"></canvas></div>
+</section></main>
+<script>
+const $=id=>document.getElementById(id),Vm=325,DT=.25,N=2880,dt=DT*Math.PI/180/(2*Math.PI*50);
+let n=2,thy=1,alpha=45,R=20,Lh=.1,sp=.2,probe='load',th=0,io=0,head=0,acc=0,pause=0,last=0,els=[];
+const lt=[0,0,0],lb=[0,0,0],cur=[0,0,0,0,0,0],B={};
+'va vb vc ia ib ic vo i vR vL'.split(' ').forEach(k=>B[k]=new Float32Array(N));
+for(let d=0;d<6;d++){B['dv'+d]=new Float32Array(N);B['di'+d]=new Float32Array(N)}
+const nm=d=>(thy?'T':'D')+(n==2?[[1,2],[3,4]][d>2|0][d%3]:[[1,3,5],[4,6,2]][d>2|0][d%3]);
+function step(){
+ const a=th*Math.PI/180,ph=n==2?[Vm*Math.sin(a),0]:[Vm*Math.sin(a),Vm*Math.sin(a-2.0944),Vm*Math.sin(a-4.1888)];
+ const w=360/n,o=n==2?0:30;let t=-1,b=-1;
+ for(let k=0;k<n;k++){const nt=o+w*k,nb=nt+180;
+  if(!thy||(th-nt-alpha+720)%360<w||lt[k])if(t<0||ph[k]>ph[t])t=k;
+  if(!thy||(th-nb-alpha+720)%360<w||lb[k])if(b<0||ph[k]<ph[b])b=k}
+ const v0=t>=0&&b>=0?ph[t]-ph[b]:0;let on=t>=0&&b>=0&&(io>0||v0>0),vo=0;
+ if(on){const f=v0/R;io=Lh<1e-6?f:f+(io-f)*Math.exp(-R*dt/Lh);vo=v0;if(io<=0){io=0;on=false;vo=0}}else io=0;
+ const vP=on?ph[t]:(Math.max(...ph)+Math.min(...ph))/2,vN=on?ph[b]:vP,x=head;
+ B.va[x]=ph[0];B.vb[x]=ph[1]||0;B.vc[x]=ph[2]||0;B.vo[x]=vo;B.i[x]=io;B.vR[x]=R*io;B.vL[x]=vo-R*io;
+ for(let k=0;k<3;k++){const T=on&&t==k,U=on&&b==k;
+  B['dv'+k][x]=k<n?ph[k]-vP:0;B['di'+k][x]=T?io:0;B['dv'+(3+k)][x]=k<n?vN-ph[k]:0;B['di'+(3+k)][x]=U?io:0;
+  cur[k]=T;cur[3+k]=U;lt[k]=T;lb[k]=U;B['i'+'abc'[k]][x]=(T?io:0)-(U?io:0)}
+ head=(head+1)%N;th+=DT}
+const dev=(d,x,y)=>`<g id="d${d}" data-p="d${d}"><rect class="hit" x="${x-26}" y="${y-34}" width="52" height="68" rx="6"/><path class="w" d="M${x} ${y-34}V${y-10}M${x} ${y+12}V${y+34}M${x-11} ${y-10}H${x+11}${thy?`M${x+5} ${y+3}L${x+22} ${y+14}`:''}"/><path class="sym" d="M${x-10} ${y+12}H${x+10}L${x} ${y-10}Z"/><text x="${x-16}" y="${y+4}" text-anchor="end">${nm(d)}</text></g>`;
+function circuit(){
+ const xs=n==2?[150,270]:[140,230,320],my=n==2?[150,250]:[160,200,240],xL=xs[n-1]+90;
+ let s=`<path class="w" d="M${xs[0]} 60H${xL}M${xs[0]} 340H${xL}M${xL} 60V110M${xL} 170V205M${xL} 265V340M${xL} 110l8 6-16 12 16 12-16 12 16 12-8 6M${xL} 205${'a8 7.5 0 0 1 0 15'.repeat(4)}`;
+ xs.forEach((x,k)=>s+=`M${x} 129V271`);
+ const sine=(cx,cy)=>`<path class="w" style="stroke-width:1.5" d="M${cx-9} ${cy}q4.5-10 9 0t9 0"/>`;
+ if(n==2)s+=`M50 178V150H${xs[0]}M50 222V250H${xs[1]}"/><g data-p="src"><rect class="hit" x="22" y="170" width="56" height="60" rx="8"/><circle class="w" cx="50" cy="200" r="22"/>${sine(50,200)}<text x="50" y="244" text-anchor="middle">vs</text></g>`;
+ else{s+=`M22 160V240`;[0,1,2].forEach(k=>s+=`M22 ${my[k]}H38M66 ${my[k]}H${xs[k]}`);s+=`"/>`;
+  [0,1,2].forEach(k=>s+=`<g data-p="src"><rect class="hit" x="34" y="${my[k]-18}" width="36" height="36" rx="6"/><circle class="w" cx="52" cy="${my[k]}" r="14"/><path class="w" style="stroke-width:1.5" d="M46 ${my[k]}q3-8 6 0t6 0"/><text x="80" y="${my[k]-5}">${'abc'[k]}</text></g>`)}
+ for(let d=0;d<6;d++)if(d%3<n)s+=dev(d,xs[d%3],d<3?95:305);
+ xs.forEach((x,k)=>s+=`<circle class="dot" cx="${x}" cy="60" r="3.5"/><circle class="dot" cx="${x}" cy="340" r="3.5"/><circle class="dot" cx="${x}" cy="${my[k]}" r="3.5"/>`);
+ s+=`<g data-p="R"><rect class="hit" x="${xL-22}" y="106" width="44" height="68" rx="6"/><text x="${xL+26}" y="144">R</text></g><g data-p="L"><rect class="hit" x="${xL-22}" y="200" width="44" height="70" rx="6"/><text x="${xL+26}" y="240">L</text></g><g data-p="load"><rect class="hit chip" x="${xL+26}" y="170" width="42" height="22" rx="11"/><text x="${xL+47}" y="185" text-anchor="middle">vo</text></g><text x="${xs[0]-14}" y="54" text-anchor="end">P</text><text x="${xs[0]-14}" y="356" text-anchor="end">N</text>`;
+ return s}
+function mark(){$('ckt').querySelectorAll('[data-p]').forEach(g=>g.classList.toggle('sel',g.dataset.p==probe))}
+function rebuild(){
+ $('sN').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.v==n));
+ $('sT').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.v==thy));
+ $('wa').hidden=!thy;$('ckt').innerHTML=circuit();els=[0,1,2,3,4,5].map(d=>$('d'+d));
+ $('ct').textContent=(n==2?'Single-phase ':'Three-phase ')+(thy?'thyristor-controlled':'diode')+' bridge rectifier';
+ const o=[['src',n==2?'Supply vs':'Supply va, vb, vc']];
+ for(let d=0;d<6;d++)if(d%3<n)o.push(['d'+d,nm(d)+(d<3?' upper, leg ':' lower, leg ')+'abc'[d%3]]);
+ o.push(['R','Resistor R'],['L','Inductor L'],['load','Load vo']);
+ $('pr').innerHTML=o.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+ if(!o.some(x=>x[0]==probe))probe='load';$('pr').value=probe;mark();
+ io=0;lt.fill(0);lb.fill(0);for(let s=0;s<N;s++)step()}
+const nice=m=>{const e=10**Math.floor(Math.log10(m)),f=m/e;return e*(f<=1?1:f<=2?2:f<=5?5:10)},fmt=v=>String(+v.toPrecision(2));
+function plot(id,V,I,avg){
+ const cv=$(id),w=cv.clientWidth,h=cv.clientHeight,d=devicePixelRatio||1;
+ if(cv.width!=Math.round(w*d)||cv.height!=Math.round(h*d)){cv.width=w*d;cv.height=h*d}
+ const g=cv.getContext('2d'),cs=getComputedStyle(document.documentElement),col=c=>cs.getPropertyValue(c).trim();
+ g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,w,h);
+ const ml=44,mr=44,mt=8,pw=w-ml-mr,ph=h-mt-6,yc=mt+ph/2,T=th-DT,span=(N-1)*DT;
+ const sc=s=>{let m=1e-3;for(const o of s){const a=B[o.k];for(let j=0;j<N;j+=3)m=Math.max(m,Math.abs(a[j]))}return nice(m*1.08)};
+ const vs=sc(V),is=I.length?sc(I):1;g.font='10px ui-monospace,Menlo,monospace';g.lineWidth=1;
+ for(let a=Math.ceil((T-span)/90)*90;a<=T;a+=90){const x=ml+pw*(1-(T-a)/span);g.strokeStyle=col('--ln');g.globalAlpha=a%360?.4:1;g.beginPath();g.moveTo(x,mt);g.lineTo(x,mt+ph);g.stroke()}
+ g.globalAlpha=1;g.strokeStyle=col('--mu');g.beginPath();g.moveTo(ml,yc);g.lineTo(ml+pw,yc);g.stroke();
+ g.fillStyle=col('--mu');g.textAlign='right';g.fillText(fmt(vs)+' V',ml-4,mt+9);g.fillText('0',ml-4,yc+3);g.fillText('-'+fmt(vs),ml-4,mt+ph);
+ if(I.length){g.textAlign='left';g.fillText(fmt(is)+' A',ml+pw+4,mt+9);g.fillText('-'+fmt(is),ml+pw+4,mt+ph)}
+ const line=(o,sy,dash)=>{const a=B[o.k];g.strokeStyle=col(o.c);g.lineWidth=2;g.setLineDash(dash?[5,4]:[]);g.beginPath();
+  for(let j=0;j<N;j++){const y=yc-a[(head+j)%N]/sy*ph/2,x=ml+pw*j/(N-1);j?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()};
+ V.forEach(o=>line(o,vs));I.forEach(o=>line(o,is,1));g.setLineDash([]);
+ if(avg!=null){const y=yc-avg/vs*ph/2;g.strokeStyle=col('--tx');g.lineWidth=1;g.setLineDash([2,3]);g.beginPath();g.moveTo(ml,y);g.lineTo(ml+pw,y);g.stroke();g.setLineDash([])}
+ let lx=ml+8;g.textAlign='left';[...V,...I].forEach(o=>{g.fillStyle=col(o.c);g.fillRect(lx,mt+3,10,3);g.fillText(o.l,lx+14,mt+9);lx+=g.measureText(o.l).width+30})}
+const SV=()=>n==2?[{k:'va',c:'--c1',l:'vs'}]:[{k:'va',c:'--c1',l:'va'},{k:'vb',c:'--c2',l:'vb'},{k:'vc',c:'--c3',l:'vc'}];
+const SI=()=>SV().map(o=>({k:'i'+o.k[1],c:o.c,l:'i'+o.l.slice(-1)}));
+function comp(p){
+ if(p=='src')return[SV(),SI()];
+ if(p=='load')return[[{k:'vo',c:'--ac',l:'vo'}],[{k:'i',c:'--tx',l:'io'}]];
+ if(p=='R')return[[{k:'vR',c:'--c1',l:'vR'}],[{k:'i',c:'--tx',l:'i'}]];
+ if(p=='L')return[[{k:'vL',c:'--c3',l:'vL'}],[{k:'i',c:'--tx',l:'i'}]];
+ const d=+p.slice(1);return[[{k:'dv'+d,c:'--c1',l:'v '+nm(d)}],[{k:'di'+d,c:'--ac',l:'i '+nm(d)}]]}
+function stats(){let sv=0,si=0;const M=360/DT;for(let j=1;j<=M;j++){const x=(head-j+N)%N;sv+=B.vo[x];si+=B.i[x]}
+ const A=thy?alpha*Math.PI/180:0,c=Math.cos(A),K=3*Math.sqrt(3)*Vm/Math.PI;let id;
+ if(n==2)id=Lh<1e-6?Vm/Math.PI*(1+c):2*Vm/Math.PI*c;
+ else id=Lh<1e-6&&alpha>60&&thy?(alpha<120?K*(1+Math.cos(A+Math.PI/3)):0):K*c;
+ return[sv/M,id,si/M]}
+let fc=0;
+function frame(t){requestAnimationFrame(frame);const k=Math.min(t-last,50)/1000;last=t;
+ if(!pause){acc+=sp*360*k;let s=acc/DT|0;acc-=s*DT;while(s--)step()}
+ for(let d=0;d<6;d++)els[d]&&els[d].classList.toggle('on',!!cur[d]);
+ const q=stats();plot('c1',SV(),SI());plot('c2',...comp('load'),q[0]);plot('c3',...comp(probe));
+ if(fc++%8==0){$('s1').textContent=q[0].toFixed(0)+' V';$('s2').textContent=Math.max(0,q[1]).toFixed(0)+' V';$('s3').textContent=q[2].toFixed(1)+' A'}}
+$('sN').onclick=e=>{const v=e.target.dataset.v;if(v){n=+v;rebuild()}};
+$('sT').onclick=e=>{const v=e.target.dataset.v;if(v){thy=+v;rebuild()}};
+$('ckt').onclick=e=>{const g=e.target.closest('[data-p]');if(g){probe=g.dataset.p;$('pr').value=probe;mark()}};
+$('pr').onchange=()=>{probe=$('pr').value;mark()};
+$('bp').onclick=()=>{pause^=1;$('bp').textContent=pause?'Resume':'Pause'};
+const bind=(id,fn)=>{const e=$(id);e.oninput=()=>fn(+e.value);fn(+e.value)};
+bind('sa',v=>{alpha=v;$('ta').textContent=v+'°'});bind('sr',v=>{R=v;$('tr').textContent=v+' Ω'});
+bind('sl',v=>{Lh=v/1000;$('tl').textContent=v+' mH'});bind('ss',v=>{sp=v;$('ts').textContent=v+' cyc/s'});
+rebuild();requestAnimationFrame(frame);
+</script></body></html>
